@@ -1,0 +1,85 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out deployment files
+        uses: actions/checkout@v6
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare public artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          public_dir="${RUNNER_TEMP}/site"
+          mkdir -p "${public_dir}"
+
+          # Publish only browser-consumable output. Development metadata,
+          # source maps, source files, and local configuration stay private.
+          rsync -a ./ "${public_dir}/" \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='_site/' \
+            --exclude='node_modules/' \
+            --exclude='work/' \
+            --exclude='outputs/' \
+            --exclude='README.md' \
+            --exclude='*.map' \
+            --exclude='*.ts' \
+            --exclude='*.tsx' \
+            --exclude='*.jsx' \
+            --exclude='*.scss' \
+            --exclude='*.sass' \
+            --exclude='.env*' \
+            --exclude='next.config.*' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='pnpm-lock.yaml' \
+            --exclude='yarn.lock' \
+            --exclude='tsconfig*.json'
+
+          test -f "${public_dir}/index.html"
+
+          if find "${public_dir}" -type f \
+            \( -name '*.map' -o -name '*.ts' -o -name '*.tsx' \
+               -o -name '*.jsx' -o -name '.env*' \) \
+            -print -quit | grep -q .; then
+            echo 'Refusing to deploy development or sensitive files.' >&2
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
