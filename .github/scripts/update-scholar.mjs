@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const authorId = "JB81MwsAAAAJ";
 const defaultDataFile = new URL("../../scholar.json", import.meta.url);
+const defaultIndexFile = new URL("../../index.html", import.meta.url);
 const defaultEndpoint = "https://serpapi.com/search.json";
 
 export function extractCitationCount(payload) {
@@ -24,9 +25,34 @@ export function extractCitationCount(payload) {
   return citations;
 }
 
+export function updateStaticCitationFallback(html, citations) {
+  const metricPattern = /<a\b(?=[^>]*\bclass="[^"]*\bscholar-metric\b[^"]*")[^>]*>[\s\S]*?<\/a>/;
+  const metricMatch = html.match(metricPattern);
+  if (!metricMatch) {
+    throw new Error("The static Scholar metric was not found in index.html");
+  }
+
+  const labelPattern = /aria-label="[\d,]+ citations on Google Scholar"/;
+  const valuePattern = /<strong>[\d,]+<\/strong>/;
+  if (!labelPattern.test(metricMatch[0]) || !valuePattern.test(metricMatch[0])) {
+    throw new Error("The static Scholar metric has an unexpected format");
+  }
+
+  const formatted = citations.toLocaleString("en-US");
+  const updatedMetric = metricMatch[0]
+    .replace(
+      labelPattern,
+      `aria-label="${formatted} citations on Google Scholar"`,
+    )
+    .replace(valuePattern, `<strong>${formatted}</strong>`);
+
+  return html.replace(metricPattern, updatedMetric);
+}
+
 export async function updateScholar({
   apiKey = process.env.SERPAPI_KEY,
   dataFile = defaultDataFile,
+  indexFile = defaultIndexFile,
   endpoint = defaultEndpoint,
   fetchImpl = fetch,
   now = () => new Date(),
@@ -35,7 +61,11 @@ export async function updateScholar({
     throw new Error("SERPAPI_KEY is not configured");
   }
 
-  const current = JSON.parse(await readFile(dataFile, "utf8"));
+  const [currentData, indexHtml] = await Promise.all([
+    readFile(dataFile, "utf8"),
+    readFile(indexFile, "utf8"),
+  ]);
+  const current = JSON.parse(currentData);
   const requestUrl = new URL(endpoint);
   requestUrl.searchParams.set("engine", "google_scholar_author");
   requestUrl.searchParams.set("author_id", authorId);
@@ -70,7 +100,11 @@ export async function updateScholar({
     live: true,
     checkedAt: now().toISOString(),
   };
-  await writeFile(dataFile, JSON.stringify(next, null, 2) + "\n");
+  const updatedIndex = updateStaticCitationFallback(indexHtml, citations);
+  await Promise.all([
+    writeFile(dataFile, JSON.stringify(next, null, 2) + "\n"),
+    writeFile(indexFile, updatedIndex),
+  ]);
   return citations;
 }
 
