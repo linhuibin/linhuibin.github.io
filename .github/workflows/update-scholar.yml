@@ -3,7 +3,8 @@ name: Update Google Scholar citations
 on:
   workflow_dispatch:
   schedule:
-    - cron: "23 2 * * *"
+    # GitHub cron uses UTC. These run at about 00:23, 08:23, and 16:23 China Standard Time.
+    - cron: "23 0,8,16 * * *"
 
 permissions:
   contents: write
@@ -18,7 +19,18 @@ jobs:
       - name: Check Google Scholar through SerpApi
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: node .github/scripts/update-scholar.mjs
+        run: |
+          for attempt in 1 2; do
+            if node .github/scripts/update-scholar.mjs; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "Scholar update failed after two attempts."
+              exit 1
+            fi
+            echo "Scholar update failed. Retrying in 5 minutes..."
+            sleep 300
+          done
       - name: Publish a changed citation count
         run: |
           if git diff --quiet -- scholar.json; then exit 0; fi
