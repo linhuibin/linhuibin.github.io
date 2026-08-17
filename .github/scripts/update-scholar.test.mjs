@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { extractCitationCount, updateScholar, updateStaticCitationFallback } from "./update-scholar.mjs";
 
 const responseData = (citations) => ({ cited_by: { table: [{ citations: { all: citations } }] } });
-const metric = (citations = 108) => `<a class="scholar-metric" aria-label="${citations} citations on Google Scholar"><strong>${citations}</strong><span>citations</span></a>`;
+const metric = (citations = 108) => `<a class="scholar-metric" aria-label="${citations} citations on Google Scholar" title="Last verified Google Scholar count"><strong>${citations}</strong><span>citations<small>Google Scholar </small></span></a>`;
 async function temporarySite(citations = 108) {
   const directory = await mkdtemp(join(tmpdir(), "scholar-update-"));
   const dataPath = join(directory, "scholar.json"), indexPath = join(directory, "index.html");
@@ -16,6 +16,7 @@ async function temporarySite(citations = 108) {
 }
 test("extracts citations", () => assert.equal(extractCitationCount(responseData(109)), 109));
 test("updates the static fallback", () => assert.match(updateStaticCitationFallback(metric(108), 1000), /<strong>1,000<\/strong>/));
+test("adds the live marker to the static fallback", () => assert.match(updateStaticCitationFallback(metric(108), 108), />live<\/i>/));
 test("writes SerpApi data and index together", async () => {
   const files = await temporarySite();
   await updateScholar({ ...files, apiKey: "test", fetchImpl: async () => new Response(JSON.stringify(responseData(109))), now: () => new Date("2026-08-17T00:00:00Z") });

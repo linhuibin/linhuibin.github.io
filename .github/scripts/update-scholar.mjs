@@ -26,8 +26,12 @@ export function updateStaticCitationFallback(html, citations) {
   const formatted = citations.toLocaleString("en-US");
   const updatedMetric = metricMatch[0]
     .replace(labelPattern, `aria-label="${formatted} citations on Google Scholar"`)
-    .replace(valuePattern, `<strong>${formatted}</strong>`);
-  return html.replace(metricPattern, updatedMetric);
+    .replace(valuePattern, `<strong>${formatted}</strong>`)
+    .replace(/title="[^"]*"/, 'title="Automatically updated from Google Scholar via SerpApi"');
+  const liveMetric = /<i\b[^>]*>live<\/i>/.test(updatedMetric)
+    ? updatedMetric
+    : updatedMetric.replace(/(<small>Google Scholar)\s*(<\/small>)/, '$1 <i aria-label="live data">live</i>$2');
+  return html.replace(metricPattern, liveMetric);
 }
 
 export async function updateScholar({ apiKey = process.env.SERPAPI_KEY, dataFile = defaultDataFile, indexFile = defaultIndexFile, endpoint = defaultEndpoint, fetchImpl = fetch, now = () => new Date() } = {}) {
