@@ -24,6 +24,8 @@ export function updateStaticScholarMetric(html, value) {
   if (!match || !/<strong>[\d,]+<\/strong>/.test(match[0])) throw new Error("The static Scholar metric was not found in index.html");
   const count = data.citations.toLocaleString("en-US");
   let metric = match[0]
+    .replace(/\sdata-scholar-(?:checked-at|live)="[^"]*"/g, "")
+    .replace(/^<a\b/, `<a data-scholar-checked-at="${data.checkedAt}" data-scholar-live="${data.live}"`)
     .replace(/aria-label="[\d,]+ citations on Google Scholar"/, `aria-label="${count} citations on Google Scholar"`)
     .replace(/<strong>[\d,]+<\/strong>/, `<strong>${count}</strong>`)
     .replace(/title="[^"]*"/, `title="${data.live ? "Automatically updated from Google Scholar" : "Last verified Google Scholar count"}"`)
