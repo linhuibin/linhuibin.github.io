@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { updateStaticScholarMetric } from "./scholar-data.mjs";
 
 const authorId = "JB81MwsAAAAJ";
 const defaultDataFile = new URL("../../scholar.json", import.meta.url);
@@ -17,21 +18,7 @@ export function extractCitationCount(payload) {
 }
 
 export function updateStaticCitationFallback(html, citations) {
-  const metricPattern = /<a\b(?=[^>]*\bclass="[^"]*\bscholar-metric\b[^"]*")[^>]*>[\s\S]*?<\/a>/;
-  const metricMatch = html.match(metricPattern);
-  if (!metricMatch) throw new Error("The static Scholar metric was not found in index.html");
-  const labelPattern = /aria-label="[\d,]+ citations on Google Scholar"/;
-  const valuePattern = /<strong>[\d,]+<\/strong>/;
-  if (!labelPattern.test(metricMatch[0]) || !valuePattern.test(metricMatch[0])) throw new Error("The static Scholar metric has an unexpected format");
-  const formatted = citations.toLocaleString("en-US");
-  const updatedMetric = metricMatch[0]
-    .replace(labelPattern, `aria-label="${formatted} citations on Google Scholar"`)
-    .replace(valuePattern, `<strong>${formatted}</strong>`)
-    .replace(/title="[^"]*"/, 'title="Automatically updated from Google Scholar via SerpApi"');
-  const liveMetric = /<i\b[^>]*>live<\/i>/.test(updatedMetric)
-    ? updatedMetric
-    : updatedMetric.replace(/(<small>Google Scholar)\s*(<\/small>)/, '$1 <i aria-label="live data">live</i>$2');
-  return html.replace(metricPattern, liveMetric);
+  return updateStaticScholarMetric(html, { citations, source: "Google Scholar via SerpApi", live: true, checkedAt: new Date().toISOString() });
 }
 
 export async function updateScholar({ apiKey = process.env.SERPAPI_KEY, dataFile = defaultDataFile, indexFile = defaultIndexFile, endpoint = defaultEndpoint, fetchImpl = fetch, now = () => new Date() } = {}) {
@@ -50,7 +37,7 @@ export async function updateScholar({ apiKey = process.env.SERPAPI_KEY, dataFile
   const previousCitations = Number(current.citations ?? 0);
   if (Number.isFinite(previousCitations) && citations < previousCitations) throw new Error("The citation count decreased; keeping the existing value");
   const next = { citations, source: "Google Scholar via SerpApi", live: true, checkedAt: now().toISOString() };
-  const updatedIndex = updateStaticCitationFallback(indexHtml, citations);
+  const updatedIndex = updateStaticScholarMetric(indexHtml, next);
   await Promise.all([writeFile(dataFile, JSON.stringify(next, null, 2) + "\n"), writeFile(indexFile, updatedIndex)]);
   return citations;
 }
